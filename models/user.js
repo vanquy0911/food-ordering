@@ -33,10 +33,13 @@ const userSchema = new mongoose.Schema(
         },
         phone: {
             type: String,
+            required: [true, "Please provide your phone number"],
+            unique: true,
             trim: true,
         },
         address: {
             type: String,
+            required: [true, "Please provide your address"],
             trim: true,
         },
     },

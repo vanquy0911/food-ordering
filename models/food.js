@@ -14,7 +14,7 @@ const foodSchema = new mongoose.Schema(
         },
         image: {
             type: String,
-            default: "default-food.jpg",
+            default: "",
         },
         description: {
             type: String,

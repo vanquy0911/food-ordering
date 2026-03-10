@@ -50,6 +50,20 @@ const getUserById = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get user profile
+ * @route   GET /api/users/profile
+ * @access  Private
+ */
+const getProfile = async (req, res, next) => {
+    try {
+        const result = await userService.getProfile(req.user.id);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * @desc    Update user profile
  * @route   PUT /api/users/profile
  * @access  Private
@@ -68,5 +82,6 @@ module.exports = {
     getAllUsers,
     deleteUser,
     getUserById,
+    getProfile,
     updateProfile,
 };
