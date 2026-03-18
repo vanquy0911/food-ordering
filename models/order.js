@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 
+// Schema cho từng món trong đơn hàng
 const orderItemSchema = new mongoose.Schema({
     food: {
         type: mongoose.Schema.Types.ObjectId,
@@ -8,11 +9,14 @@ const orderItemSchema = new mongoose.Schema({
     },
     name: {
         type: String,
-        required: true, // Snapshot of food name at time of order
+        required: true, // Snapshot tên món tại thời điểm đặt
+    },
+    image: {
+        type: String, // Snapshot ảnh món
     },
     price: {
         type: Number,
-        required: true, // Snapshot of food price at time of order
+        required: true, // Snapshot giá món tại thời điểm đặt
         min: 0,
     },
     quantity: {
@@ -22,6 +26,26 @@ const orderItemSchema = new mongoose.Schema({
     },
 });
 
+// Schema địa chỉ giao hàng
+const addressSchema = new mongoose.Schema({
+    street: {
+        type: String,
+        required: [true, "Please provide street"],
+        trim: true,
+    },
+    city: {
+        type: String,
+        required: [true, "Please provide city"],
+        trim: true,
+    },
+    district: {
+        type: String,
+        required: [true, "Please provide district"],
+        trim: true,
+    },
+});
+
+// Schema chính của Order
 const orderSchema = new mongoose.Schema(
     {
         user: {
@@ -29,32 +53,38 @@ const orderSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
-        items: [orderItemSchema],
+
+        items: {
+            type: [orderItemSchema],
+            required: true,
+        },
+
         totalPrice: {
             type: Number,
             required: true,
             min: [0, "Total price cannot be negative"],
         },
-        address: {
-            type: String,
-            required: [true, "Please provide delivery address"],
-            trim: true,
-        },
+
+        address: addressSchema,
+
         phone: {
             type: String,
             required: [true, "Please provide contact phone number"],
             trim: true,
         },
+
         status: {
             type: String,
-            enum: ["pending", "confirmed", "delivering", "completed", "cancelled"],
+            enum: ["pending", "confirmed", "preparing", "delivering", "delivered", "cancelled"],
             default: "pending",
         },
+
         paymentMethod: {
             type: String,
             enum: ["cash", "momo", "stripe"],
             default: "cash",
         },
+
         isPaid: {
             type: Boolean,
             default: false,
@@ -65,9 +95,9 @@ const orderSchema = new mongoose.Schema(
     }
 );
 
-// Create indexes for common queries
+// Indexes để query nhanh hơn
 orderSchema.index({ user: 1 });
 orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: -1 }); // For sorting by newest first
+orderSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, "Please provide your email"],
             unique: true,
+            index: true,
             lowercase: true,
             trim: true,
             match: [
@@ -36,12 +37,22 @@ const userSchema = new mongoose.Schema(
             required: [true, "Please provide your phone number"],
             unique: true,
             trim: true,
+            match: [/^[0-9]{9,11}$/, "Invalid phone number"]
         },
         address: {
-            type: String,
-            required: [true, "Please provide your address"],
-            trim: true,
-        },
+            street: {
+                type: String,
+                trim: true
+            },
+            city: {
+                type: String,
+                trim: true
+            },
+            district: {
+                type: String,
+                trim: true
+            }
+        }
     },
     {
         timestamps: true,
