@@ -6,6 +6,7 @@ const {
     getAllOrders,
     getOrderById,
     updateOrderStatus,
+    cancelOrder,
 } = require("../controller/orderController");
 const { protect, admin } = require("../middleware/authMiddleware");
 
@@ -13,6 +14,7 @@ const { protect, admin } = require("../middleware/authMiddleware");
 router.post("/", protect, createOrder);
 router.get("/myorders", protect, getMyOrders);
 router.get("/:id", protect, getOrderById);
+router.put("/:id/cancel", protect, cancelOrder);
 
 // Routes that require admin privileges
 router.get("/", protect, admin, getAllOrders);

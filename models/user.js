@@ -2,6 +2,43 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+// 📦 Address Schema
+const addressSchema = new mongoose.Schema(
+    {
+        fullName: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        phone: {
+            type: String,
+            required: true,
+            match: [/^[0-9]{9,11}$/, "Invalid phone number"]
+        },
+        street: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        district: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        city: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        isDefault: {
+            type: Boolean,
+            default: false
+        }
+    },
+    { _id: true }
+);
+
+// 👤 User Schema
 const userSchema = new mongoose.Schema(
     {
         name: {
@@ -25,7 +62,7 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, "Please provide a password"],
             minlength: [6, "Password must be at least 6 characters"],
-            select: false, // Don't return password by default
+            select: false,
         },
         role: {
             type: String,
@@ -35,43 +72,26 @@ const userSchema = new mongoose.Schema(
         phone: {
             type: String,
             required: [true, "Please provide your phone number"],
-            unique: true,
             trim: true,
             match: [/^[0-9]{9,11}$/, "Invalid phone number"]
         },
-        address: {
-            street: {
-                type: String,
-                trim: true
-            },
-            city: {
-                type: String,
-                trim: true
-            },
-            district: {
-                type: String,
-                trim: true
-            }
-        }
+
+        addresses: [addressSchema]
     },
     {
         timestamps: true,
     }
 );
 
-// Indexes
-userSchema.index({ email: 1 }); // For login and unique constraint
-userSchema.index({ role: 1 }); // For filtering by role (admin queries)
+// 📌 Indexes
+userSchema.index({ email: 1 });
+userSchema.index({ role: 1 });
 
-// Pre-save hook to hash password
+// 🔐 Hash password
 userSchema.pre("save", async function (next) {
-    // Only hash the password if it has been modified (or is new)
-    if (!this.isModified("password")) {
-        return next();
-    }
+    if (!this.isModified("password")) return next();
 
     try {
-        // Generate salt and hash password
         const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
         next();
@@ -80,12 +100,12 @@ userSchema.pre("save", async function (next) {
     }
 });
 
-// Method to compare password for login
+// 🔑 Compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to generate JWT token
+// 🎫 Generate JWT
 userSchema.methods.generateToken = function () {
     return jwt.sign(
         {
@@ -97,6 +117,11 @@ userSchema.methods.generateToken = function () {
             expiresIn: process.env.JWT_EXPIRE || "1d",
         }
     );
+};
+
+// ⭐ Helper: get default address
+userSchema.methods.getDefaultAddress = function () {
+    return this.addresses.find(addr => addr.isDefault);
 };
 
 module.exports = mongoose.model("User", userSchema);

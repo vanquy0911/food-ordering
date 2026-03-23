@@ -1,6 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const path = require('path');
 const connectDB = require('./config/db');
 
 // Load environment variables
@@ -42,6 +43,11 @@ app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/foods', require('./routes/foodRoutes'));
 app.use('/api/cart', require('./routes/cartRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
+app.use('/api/upload', require('./routes/uploadRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes'));
+
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 
 // Error handling middleware
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');

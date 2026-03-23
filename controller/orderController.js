@@ -82,10 +82,25 @@ const updateOrderStatus = async (req, res, next) => {
     }
 };
 
+/**
+ * @desc    Cancel order by user
+ * @route   PUT /api/orders/:id/cancel
+ * @access  Private
+ */
+const cancelOrder = async (req, res, next) => {
+    try {
+        const result = await orderService.cancelOrder(req.params.id, req.user.id);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     createOrder,
     getMyOrders,
     getAllOrders,
     getOrderById,
     updateOrderStatus,
+    cancelOrder,
 };

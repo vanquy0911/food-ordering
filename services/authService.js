@@ -43,13 +43,25 @@ class AuthService {
             throw error;
         }
 
+        let addresses = [];
+        if (address && address.street && address.city && address.district) {
+            addresses.push({
+                fullName: name,
+                phone: phone,
+                street: address.street,
+                city: address.city,
+                district: address.district,
+                isDefault: true
+            });
+        }
+
         // Create user (password will be hashed automatically by pre-save hook)
         const user = await User.create({
             name,
             email,
             password,
             phone,
-            address,
+            addresses,
         });
 
         // Generate JWT token
@@ -67,7 +79,7 @@ class AuthService {
                     email: user.email,
                     role: user.role,
                     phone: user.phone,
-                    address: user.address,
+                    address: user.addresses && user.addresses.length > 0 ? user.addresses[0] : null,
                     createdAt: user.createdAt,
                 },
             },
@@ -122,7 +134,7 @@ class AuthService {
                     email: user.email,
                     role: user.role,
                     phone: user.phone,
-                    address: user.address,
+                    address: user.addresses && user.addresses.length > 0 ? user.addresses[0] : null,
                 },
             },
         };
@@ -151,7 +163,7 @@ class AuthService {
                     email: user.email,
                     role: user.role,
                     phone: user.phone,
-                    address: user.address,
+                    address: user.addresses && user.addresses.length > 0 ? user.addresses[0] : null,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt,
                 },

@@ -179,7 +179,7 @@ class OrderService {
      * @returns {Object} - Updated order
      */
     async updateOrderStatus(orderId, status) {
-        const validStatuses = ["pending", "confirmed", "delivering", "completed", "cancelled"];
+        const validStatuses = ["pending", "confirmed", "preparing", "delivering", "delivered", "completed", "cancelled"];
 
         if (!validStatuses.includes(status)) {
             const error = new Error("Invalid status");
@@ -212,14 +212,67 @@ class OrderService {
         }
 
         await order.save();
-
-        return {
-            success: true,
-            data: {
-                order,
-            },
-        };
+    
+            return {
+                success: true,
+                data: {
+                    order,
+                },
+            };
+        }
+    
+        /**
+         * Cancel order by user
+         * @param {String} orderId 
+         * @param {String} userId 
+         * @returns {Object} - Cancelled order
+         */
+        async cancelOrder(orderId, userId) {
+            const order = await Order.findById(orderId);
+    
+            if (!order) {
+                const error = new Error("Order not found");
+                error.statusCode = 404;
+                throw error;
+            }
+    
+            // Check ownership
+            if (order.user.toString() !== userId) {
+                const error = new Error("Not authorized to cancel this order");
+                error.statusCode = 403;
+                throw error;
+            }
+    
+            // Check status - only pending can be cancelled by user
+            if (order.status !== "pending") {
+                const error = new Error(`Cannot cancel order in ${order.status} status. Please contact support.`);
+                error.statusCode = 400;
+                throw error;
+            }
+    
+            // Re-use logic for stock restoration from updateOrderStatus (or just call it)
+            // But since updateOrderStatus is intended for Admin, we can just copy-paste or abstract.
+            // I'll call the updateOrderStatus logic but directly update the order.
+            
+            order.status = "cancelled";
+            
+            // Restore stock
+            for (const item of order.items) {
+                await Food.findByIdAndUpdate(item.food, {
+                    $inc: { stock: item.quantity },
+                });
+            }
+    
+            await order.save();
+    
+            return {
+                success: true,
+                message: "Order cancelled successfully",
+                data: {
+                    order,
+                },
+            };
+        }
     }
-}
-
-module.exports = new OrderService();
+    
+    module.exports = new OrderService();
