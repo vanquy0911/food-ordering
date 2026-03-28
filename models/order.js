@@ -89,6 +89,14 @@ const orderSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        coupon: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Coupon",
+        },
+        discountAmount: {
+            type: Number,
+            default: 0,
+        },
     },
     {
         timestamps: true,

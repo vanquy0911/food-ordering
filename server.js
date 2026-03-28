@@ -43,6 +43,7 @@ app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/foods', require('./routes/foodRoutes'));
 app.use('/api/cart', require('./routes/cartRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
+app.use('/api/coupons', require('./routes/couponRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 

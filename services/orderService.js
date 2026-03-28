@@ -1,6 +1,7 @@
 const Order = require("../models/order");
 const Cart = require("../models/cart");
 const Food = require("../models/food");
+const couponService = require("../services/couponService");
 
 /**
  * Order Service
@@ -14,7 +15,7 @@ class OrderService {
      * @returns {Object} - Created order
      */
     async createOrder(userId, orderData) {
-        const { address, phone, paymentMethod, items: bodyItems } = orderData;
+        const { address, phone, paymentMethod, items: bodyItems, couponCode } = orderData;
 
         let cartItems = [];
         let isCartFromDb = false;
@@ -69,11 +70,36 @@ class OrderService {
             totalPrice += food.price * item.quantity;
         }
 
-        // 3. Create Order
+        // 3. Handle Coupon
+        let discountAmount = 0;
+        let appliedCoupon = null;
+
+        if (couponCode) {
+            try {
+                const result = await couponService.validateCoupon(couponCode, totalPrice, userId);
+                appliedCoupon = result.coupon;
+                discountAmount = result.discountAmount;
+                
+                // Increment used count for this user
+                await couponService.incrementUsage(appliedCoupon._id, userId);
+            } catch (err) {
+                // If coupon is invalid, we don't apply it but we don't necessarily fail the whole order
+                // unless the user expects the discount. For now, let's just proceed without coupon.
+                console.warn(`Coupon validation failed during checkout: ${err.message}`);
+                appliedCoupon = null;
+                discountAmount = 0;
+            }
+        }
+
+        const finalTotalPrice = parseFloat((totalPrice - discountAmount).toFixed(2));
+
+        // 4. Create Order
         const order = await Order.create({
             user: userId,
             items: orderItems,
-            totalPrice,
+            totalPrice: finalTotalPrice,
+            discountAmount,
+            coupon: appliedCoupon ? appliedCoupon._id : null,
             address,
             phone,
             paymentMethod,
@@ -81,14 +107,14 @@ class OrderService {
             isPaid: false, // In a real app, this would be updated after payment gateway confirms
         });
 
-        // 4. Decrease stock of foods
+        // 5. Decrease stock of foods
         for (const item of orderItems) {
             await Food.findByIdAndUpdate(item.food, {
                 $inc: { stock: -item.quantity },
             });
         }
 
-        // 5. Clear user cart if it was from DB
+        // 6. Clear user cart if it was from DB
         if (isCartFromDb) {
             const cartToClear = await Cart.findOne({ user: userId });
             if (cartToClear) {
