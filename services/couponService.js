@@ -24,9 +24,9 @@ class CouponService {
         }
 
         // 2. Find Coupon
-        const coupon = await Coupon.findOne({ 
-            code: code.trim().toUpperCase(), 
-            isActive: true 
+        const coupon = await Coupon.findOne({
+            code: code.trim().toUpperCase(),
+            isActive: true
         });
 
         if (!coupon) {
@@ -55,7 +55,7 @@ class CouponService {
         if (userId && coupon.usageLimitPerUser !== null) {
             const userUsage = coupon.usedByUsers.find(u => u.user.toString() === userId.toString());
             const userUsedCount = userUsage ? userUsage.count : 0;
-            
+
             if (userUsedCount >= coupon.usageLimitPerUser) {
                 const error = new Error(`You have already used this coupon the maximum number of times (${coupon.usageLimitPerUser})`);
                 error.statusCode = 400;

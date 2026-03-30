@@ -1,7 +1,11 @@
 const Order = require("../models/order");
 const Cart = require("../models/cart");
 const Food = require("../models/food");
+const Payment = require("../models/payment");
+const SettingLocation = require("../models/settinglocation");
+const { calculateDistance } = require("../utils/distance");
 const couponService = require("../services/couponService");
+const { getIO } = require("../config/socket");
 
 /**
  * Order Service
@@ -79,7 +83,7 @@ class OrderService {
                 const result = await couponService.validateCoupon(couponCode, totalPrice, userId);
                 appliedCoupon = result.coupon;
                 discountAmount = result.discountAmount;
-                
+
                 // Increment used count for this user
                 await couponService.incrementUsage(appliedCoupon._id, userId);
             } catch (err) {
@@ -91,23 +95,58 @@ class OrderService {
             }
         }
 
-        const finalTotalPrice = parseFloat((totalPrice - discountAmount).toFixed(2));
+        // 4. Calculate Shipping Fee
+        let shippingFee = 0;
+        const settings = await SettingLocation.findOne({ isActive: true });
 
-        // 4. Create Order
+        if (settings) {
+            const config = settings.shippingConfig;
+            shippingFee = config.baseFee;
+
+            // If user provided coordinates, calculate distance-based fee
+            if (address.latitude && address.longitude) {
+                const distance = calculateDistance(
+                    settings.shopLocation.lat,
+                    settings.shopLocation.lng,
+                    address.latitude,
+                    address.longitude
+                );
+
+                // Add per km fee
+                shippingFee += Math.round(distance * config.perKmFee);
+
+                // Check distance limit
+                if (config.maxDeliveryDistance && distance > config.maxDeliveryDistance) {
+                    const error = new Error(`Sorry, we don't deliver to locations further than ${config.maxDeliveryDistance}km`);
+                    error.statusCode = 400;
+                    throw error;
+                }
+            }
+
+            // Apply Free Ship threshold
+            if (totalPrice >= config.freeShipThreshold) {
+                shippingFee = 0;
+            }
+        }
+
+        const finalTotalPrice = parseFloat((totalPrice + shippingFee - discountAmount).toFixed(2));
+
+        // 5. Create Order
         const order = await Order.create({
             user: userId,
             items: orderItems,
             totalPrice: finalTotalPrice,
             discountAmount,
+            shippingFee,
             coupon: appliedCoupon ? appliedCoupon._id : null,
             address,
             phone,
             paymentMethod,
             status: "pending",
-            isPaid: false, // In a real app, this would be updated after payment gateway confirms
+            isPaid: false,
         });
 
-        // 5. Decrease stock of foods
+        // 6. Decrease stock of foods
         for (const item of orderItems) {
             await Food.findByIdAndUpdate(item.food, {
                 $inc: { stock: -item.quantity },
@@ -122,6 +161,15 @@ class OrderService {
                 await cartToClear.save();
             }
         }
+
+        // 7. Create corresponding Payment record
+        await Payment.create({
+            order: order._id,
+            user: userId,
+            amount: finalTotalPrice,
+            paymentMethod: paymentMethod,
+            paymentStatus: "pending", // Initial status for all methods
+        });
 
         return {
             success: true,
@@ -238,67 +286,89 @@ class OrderService {
         }
 
         await order.save();
-    
-            return {
-                success: true,
-                data: {
-                    order,
-                },
-            };
+
+        // Emit socket event to the user
+        try {
+            getIO().to(`user_${order.user}`).emit("statusUpdate", {
+                orderId: order._id,
+                status: status,
+                message: `Your order status has been updated to: ${status}`
+            });
+        } catch (err) {
+            console.error("Socket emit failed:", err.message);
         }
-    
-        /**
-         * Cancel order by user
-         * @param {String} orderId 
-         * @param {String} userId 
-         * @returns {Object} - Cancelled order
-         */
-        async cancelOrder(orderId, userId) {
-            const order = await Order.findById(orderId);
-    
-            if (!order) {
-                const error = new Error("Order not found");
-                error.statusCode = 404;
-                throw error;
-            }
-    
-            // Check ownership
-            if (order.user.toString() !== userId) {
-                const error = new Error("Not authorized to cancel this order");
-                error.statusCode = 403;
-                throw error;
-            }
-    
-            // Check status - only pending can be cancelled by user
-            if (order.status !== "pending") {
-                const error = new Error(`Cannot cancel order in ${order.status} status. Please contact support.`);
-                error.statusCode = 400;
-                throw error;
-            }
-    
-            // Re-use logic for stock restoration from updateOrderStatus (or just call it)
-            // But since updateOrderStatus is intended for Admin, we can just copy-paste or abstract.
-            // I'll call the updateOrderStatus logic but directly update the order.
-            
-            order.status = "cancelled";
-            
-            // Restore stock
-            for (const item of order.items) {
-                await Food.findByIdAndUpdate(item.food, {
-                    $inc: { stock: item.quantity },
-                });
-            }
-    
-            await order.save();
-    
-            return {
-                success: true,
-                message: "Order cancelled successfully",
-                data: {
-                    order,
-                },
-            };
-        }
+
+        return {
+            success: true,
+            data: {
+                order,
+            },
+        };
     }
-    
-    module.exports = new OrderService();
+
+    /**
+     * Cancel order by user
+     * @param {String} orderId 
+     * @param {String} userId 
+     * @returns {Object} - Cancelled order
+     */
+    async cancelOrder(orderId, userId) {
+        const order = await Order.findById(orderId);
+
+        if (!order) {
+            const error = new Error("Order not found");
+            error.statusCode = 404;
+            throw error;
+        }
+
+        // Check ownership
+        if (order.user.toString() !== userId) {
+            const error = new Error("Not authorized to cancel this order");
+            error.statusCode = 403;
+            throw error;
+        }
+
+        // Check status - only pending can be cancelled by user
+        if (order.status !== "pending") {
+            const error = new Error(`Cannot cancel order in ${order.status} status. Please contact support.`);
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Re-use logic for stock restoration from updateOrderStatus (or just call it)
+        // But since updateOrderStatus is intended for Admin, we can just copy-paste or abstract.
+        // I'll call the updateOrderStatus logic but directly update the order.
+
+        order.status = "cancelled";
+
+        // Restore stock
+        for (const item of order.items) {
+            await Food.findByIdAndUpdate(item.food, {
+                $inc: { stock: item.quantity },
+            });
+        }
+
+        await order.save();
+
+        // Emit socket event to the user (in case they have multiple tabs open)
+        try {
+            getIO().to(`user_${order.user}`).emit("statusUpdate", {
+                orderId: order._id,
+                status: "cancelled",
+                message: "Order has been cancelled successfully"
+            });
+        } catch (err) {
+            console.error("Socket emit failed:", err.message);
+        }
+
+        return {
+            success: true,
+            message: "Order cancelled successfully",
+            data: {
+                order,
+            },
+        };
+    }
+}
+
+module.exports = new OrderService();

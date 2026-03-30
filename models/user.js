@@ -2,42 +2,6 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// 📦 Address Schema
-const addressSchema = new mongoose.Schema(
-    {
-        fullName: {
-            type: String,
-            required: true,
-            trim: true
-        },
-        phone: {
-            type: String,
-            required: true,
-            match: [/^[0-9]{9,11}$/, "Invalid phone number"]
-        },
-        street: {
-            type: String,
-            required: true,
-            trim: true
-        },
-        district: {
-            type: String,
-            required: true,
-            trim: true
-        },
-        city: {
-            type: String,
-            required: true,
-            trim: true
-        },
-        isDefault: {
-            type: Boolean,
-            default: false
-        }
-    },
-    { _id: true }
-);
-
 // 👤 User Schema
 const userSchema = new mongoose.Schema(
     {
@@ -73,10 +37,15 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, "Please provide your phone number"],
             trim: true,
-            match: [/^[0-9]{9,11}$/, "Invalid phone number"]
+            match: [/^[0-9]{9,11}$/, "Invalid phone number"],
         },
 
-        addresses: [addressSchema]
+        addresses: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Address",
+            },
+        ],
     },
     {
         timestamps: true,
@@ -121,7 +90,7 @@ userSchema.methods.generateToken = function () {
 
 // ⭐ Helper: get default address
 userSchema.methods.getDefaultAddress = function () {
-    return this.addresses.find(addr => addr.isDefault);
+    return this.addresses.find((addr) => addr.isDefault);
 };
 
 module.exports = mongoose.model("User", userSchema);

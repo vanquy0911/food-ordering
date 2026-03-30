@@ -43,6 +43,13 @@ const addressSchema = new mongoose.Schema({
         required: [true, "Please provide district"],
         trim: true,
     },
+    // Adding coordinates for map display
+    latitude: {
+        type: Number,
+    },
+    longitude: {
+        type: Number,
+    },
 });
 
 // Schema chính của Order
@@ -81,7 +88,7 @@ const orderSchema = new mongoose.Schema(
 
         paymentMethod: {
             type: String,
-            enum: ["cash", "momo", "stripe"],
+            enum: ["cash", "momo", "vnpay"],
             default: "cash",
         },
 
@@ -94,6 +101,10 @@ const orderSchema = new mongoose.Schema(
             ref: "Coupon",
         },
         discountAmount: {
+            type: Number,
+            default: 0,
+        },
+        shippingFee: {
             type: Number,
             default: 0,
         },

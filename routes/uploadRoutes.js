@@ -1,36 +1,22 @@
-const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const router = express.Router();
-
-const storage = multer.diskStorage({
-    destination(req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename(req, file, cb) {
-        cb(
-            null,
-            `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`
-        );
-    },
-});
-
-function checkFileType(file, cb) {
-    const filetypes = /jpg|jpeg|png|webp|gif/;
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = filetypes.test(file.mimetype);
-
-    if (extname && mimetype) {
-        return cb(null, true);
-    } else {
-        cb('Images only!');
-    }
-}
+const { storage } = require('../config/cloudinary');
 
 const upload = multer({
     storage,
     fileFilter: function (req, file, cb) {
-        checkFileType(file, cb);
+        const filetypes = /jpg|jpeg|png|webp|gif/;
+        const mimetypes = /image\/jpe?g|image\/png|image\/webp|image\/gif/;
+
+        const extname = filetypes.test(require('path').extname(file.originalname).toLowerCase());
+        const mimetype = mimetypes.test(file.mimetype);
+
+        if (extname && mimetype) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Images only!'));
+        }
     },
 });
 
@@ -39,9 +25,10 @@ router.post('/', upload.single('image'), (req, res) => {
         return res.status(400).send({ message: 'No file uploaded' });
     }
 
-    // Use full URL to solve missing images across different ports in DEV
-    const fileUrl = `${req.protocol}://${req.get('host')}/${req.file.path.replace(/\\/g, '/')}`;
-    res.send(fileUrl);
+    // req.file.path contains the Cloudinary URL when using multer-storage-cloudinary
+    res.send(req.file.path);
 });
 
 module.exports = router;
+
+// module.exports = router;

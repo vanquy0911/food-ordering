@@ -46,6 +46,7 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/coupons', require('./routes/couponRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
+app.use('/api/settings', require('./routes/settingRoutes'));
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
@@ -57,8 +58,16 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const http = require("http");
+const server = http.createServer(app);
+const { init } = require("./config/socket");
+
+// Initialize Socket.io
+init(server);
+
+server.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
-    console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`🌐 API URL: http://localhost:${PORT}`);
+    console.log(`⚡ Socket.io is ready`);
 });
