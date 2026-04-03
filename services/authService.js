@@ -43,25 +43,13 @@ class AuthService {
             throw error;
         }
 
-        let addresses = [];
-        if (address && address.street && address.city && address.district) {
-            addresses.push({
-                fullName: name,
-                phone: phone,
-                street: address.street,
-                city: address.city,
-                district: address.district,
-                isDefault: true
-            });
-        }
-
         // Create user (password will be hashed automatically by pre-save hook)
         const user = await User.create({
             name,
             email,
             password,
             phone,
-            addresses,
+            addresses: [],
         });
 
         // Generate JWT token

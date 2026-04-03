@@ -12,8 +12,12 @@ const orderService = require("../services/orderService");
  */
 const createOrder = async (req, res, next) => {
     try {
-        const result = await orderService.createOrder(req.user.id, req.body);
-        res.status(201).json(result);
+        const idempotencyKey = req.headers["x-idempotency-key"];
+        const result = await orderService.createOrder(req.user.id, req.body, idempotencyKey);
+        
+        // If it's a cached response from idempotency, use its stored status
+        const statusCode = (result.source === 'idempotency_cache') ? (result.status || 201) : 201;
+        res.status(statusCode).json(result);
     } catch (error) {
         next(error);
     }

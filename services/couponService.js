@@ -100,15 +100,16 @@ class CouponService {
      * Increment coupon usage count for both global and specific user
      * @param {String} couponId 
      * @param {String} userId 
+     * @param {Object} session - Mongoose session for transaction
      */
-    async incrementUsage(couponId, userId) {
+    async incrementUsage(couponId, userId, session = null) {
         if (!userId) {
             return await Coupon.findByIdAndUpdate(couponId, {
                 $inc: { usedCount: 1 },
-            });
+            }, { session });
         }
 
-        const coupon = await Coupon.findById(couponId);
+        const coupon = await Coupon.findById(couponId).session(session);
         if (!coupon) return;
 
         coupon.usedCount += 1;
@@ -120,7 +121,7 @@ class CouponService {
             coupon.usedByUsers.push({ user: userId, count: 1 });
         }
 
-        await coupon.save();
+        await coupon.save({ session });
     }
 
     /**

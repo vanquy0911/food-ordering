@@ -209,6 +209,50 @@ class CartService {
             message: "Cart cleared successfully",
         };
     }
+
+    /**
+     * Sync guest cart items with user cart
+     * @param {String} userId
+     * @param {Array} items - Array of { foodId, quantity }
+     * @returns {Object} - Updated cart
+     */
+    async syncCart(userId, items) {
+        if (!Array.isArray(items) || items.length === 0) {
+            return this.getCart(userId);
+        }
+
+        // Find or create cart
+        let cart = await Cart.findOne({ user: userId });
+        if (!cart) {
+            cart = await Cart.create({ user: userId, items: [] });
+        }
+
+        for (const item of items) {
+            const { foodId, quantity } = item;
+            
+            // Basic validation
+            if (!foodId || quantity < 1) continue;
+
+            // Check food exists and check stock
+            const food = await Food.findById(foodId);
+            if (!food || !food.isAvailable) continue;
+
+            const existingItem = cart.items.find(
+                (ci) => ci.food.toString() === foodId
+            );
+
+            if (existingItem) {
+                // If exists, use the larger quantity or just add? 
+                // Usually we add or replace. Let's add but cap at stock.
+                existingItem.quantity = Math.min(food.stock, existingItem.quantity + quantity);
+            } else {
+                cart.items.push({ food: foodId, quantity: Math.min(food.stock, quantity) });
+            }
+        }
+
+        await cart.save();
+        return this.getCart(userId);
+    }
 }
 
 module.exports = new CartService();

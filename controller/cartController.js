@@ -81,10 +81,26 @@ const clearCart = async (req, res, next) => {
     }
 };
 
+/**
+ * @desc    Sync cart
+ * @route   POST /api/cart/sync
+ * @access  Private
+ */
+const syncCart = async (req, res, next) => {
+    try {
+        const { items } = req.body;
+        const result = await cartService.syncCart(req.user.id, items);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getCart,
     addItem,
     removeItem,
     updateItemQuantity,
     clearCart,
+    syncCart,
 };
