@@ -1,3 +1,4 @@
+const chatService = require("../services/chatService");
 const socketIO = require("socket.io");
 
 let io;
@@ -23,7 +24,28 @@ module.exports = {
             socket.on("join", (userId) => {
                 if (userId) {
                     socket.join(`user_${userId}`);
-                    console.log(`👤 User ${userId} joined their personal room`);
+                    console.log(`👤 User joined private room: user_${userId}`);
+                }
+            });
+
+            // --- CHAT EVENTS ---
+
+            // 1. Join a specific chat room (usually user_id)
+            socket.on("chat:join", (chatUserId) => {
+                if (chatUserId) {
+                    socket.join(`chat_${chatUserId}`);
+                    console.log(`💬 Joined chat room: chat_${chatUserId}`);
+                }
+            });
+
+            // 2. Handle sending a message
+            socket.on("chat:send", async (data) => {
+                try {
+                    // ChatService now handles both Creating and Emitting the message
+                    await chatService.createMessage(data);
+                } catch (error) {
+                    console.error("❌ Chat error:", error.message);
+                    socket.emit("chat:error", { message: "Failed to send message" });
                 }
             });
 
@@ -37,8 +59,6 @@ module.exports = {
 
     /**
      * Returns the initialized socket.io instance
-     * @returns {Object} - The socket.io instance
-     * @throws {Error} - If socket.io is not initialized
      */
     getIO: () => {
         if (!io) {

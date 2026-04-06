@@ -13,7 +13,9 @@ const orderService = require("../services/orderService");
 const createOrder = async (req, res, next) => {
     try {
         const idempotencyKey = req.headers["x-idempotency-key"];
-        const result = await orderService.createOrder(req.user.id, req.body, idempotencyKey);
+        const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        
+        const result = await orderService.createOrder(req.user.id, req.body, idempotencyKey, clientIp);
         
         // If it's a cached response from idempotency, use its stored status
         const statusCode = (result.source === 'idempotency_cache') ? (result.status || 201) : 201;

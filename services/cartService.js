@@ -1,5 +1,6 @@
 const Cart = require("../models/cart");
 const Food = require("../models/food");
+const { runInTransaction } = require("../utils/transactionHelper");
 
 /**
  * Cart Service
@@ -31,7 +32,7 @@ class CartService {
         }
 
         const totalPrice = cart.items.reduce((sum, item) => {
-            return sum + item.food.price * item.quantity;
+            return sum + (item.food ? item.food.price * item.quantity : 0);
         }, 0);
 
         return {
@@ -43,7 +44,7 @@ class CartService {
                         id: item._id,
                         food: item.food,
                         quantity: item.quantity,
-                        subtotal: item.food.price * item.quantity,
+                        subtotal: item.food ? item.food.price * item.quantity : 0,
                     })),
                     totalItems: cart.items.length,
                     totalPrice,
@@ -60,14 +61,12 @@ class CartService {
      * @returns {Object} - Updated cart
      */
     async addItem(userId, foodId, quantity = 1) {
-        // Validate quantity
         if (quantity < 1) {
             const error = new Error("Quantity must be at least 1");
             error.statusCode = 400;
             throw error;
         }
 
-        // Check food exists and is available
         const food = await Food.findById(foodId);
         if (!food) {
             const error = new Error("Food not found");
@@ -85,19 +84,16 @@ class CartService {
             throw error;
         }
 
-        // Find or create cart
         let cart = await Cart.findOne({ user: userId });
         if (!cart) {
             cart = await Cart.create({ user: userId, items: [] });
         }
 
-        // Check if food already in cart
         const existingItem = cart.items.find(
             (item) => item.food.toString() === foodId
         );
 
         if (existingItem) {
-            // Check stock for total quantity
             if (food.stock < existingItem.quantity + quantity) {
                 const error = new Error(`Only ${food.stock} items left in stock`);
                 error.statusCode = 400;
@@ -120,7 +116,6 @@ class CartService {
      */
     async removeItem(userId, itemId) {
         const cart = await Cart.findOne({ user: userId });
-
         if (!cart) {
             const error = new Error("Cart not found");
             error.statusCode = 404;
@@ -139,7 +134,6 @@ class CartService {
 
         cart.items.splice(itemIndex, 1);
         await cart.save();
-
         return this.getCart(userId);
     }
 
@@ -158,7 +152,6 @@ class CartService {
         }
 
         const cart = await Cart.findOne({ user: userId });
-
         if (!cart) {
             const error = new Error("Cart not found");
             error.statusCode = 404;
@@ -175,7 +168,6 @@ class CartService {
             throw error;
         }
 
-        // Check stock
         const food = await Food.findById(item.food);
         if (food.stock < quantity) {
             const error = new Error(`Only ${food.stock} items left in stock`);
@@ -185,33 +177,28 @@ class CartService {
 
         item.quantity = quantity;
         await cart.save();
-
         return this.getCart(userId);
     }
 
     /**
      * Clear all items in cart
      * @param {String} userId
-     * @returns {Object} - Success message
      */
     async clearCart(userId) {
         const cart = await Cart.findOne({ user: userId });
-
         if (!cart) {
             return { success: true, message: "Cart is already empty" };
         }
-
         cart.items = [];
         await cart.save();
-
         return {
             success: true,
-            message: "Cart cleared successfully",
+            message: "Cart cleared successfully"
         };
     }
 
     /**
-     * Sync guest cart items with user cart
+     * Sync guest cart items with user cart using Transaction
      * @param {String} userId
      * @param {Array} items - Array of { foodId, quantity }
      * @returns {Object} - Updated cart
@@ -221,37 +208,35 @@ class CartService {
             return this.getCart(userId);
         }
 
-        // Find or create cart
-        let cart = await Cart.findOne({ user: userId });
-        if (!cart) {
-            cart = await Cart.create({ user: userId, items: [] });
-        }
+        return await runInTransaction(async (session) => {
+            let cart = await Cart.findOne({ user: userId }).session(session);
 
-        for (const item of items) {
-            const { foodId, quantity } = item;
-            
-            // Basic validation
-            if (!foodId || quantity < 1) continue;
-
-            // Check food exists and check stock
-            const food = await Food.findById(foodId);
-            if (!food || !food.isAvailable) continue;
-
-            const existingItem = cart.items.find(
-                (ci) => ci.food.toString() === foodId
-            );
-
-            if (existingItem) {
-                // If exists, use the larger quantity or just add? 
-                // Usually we add or replace. Let's add but cap at stock.
-                existingItem.quantity = Math.min(food.stock, existingItem.quantity + quantity);
-            } else {
-                cart.items.push({ food: foodId, quantity: Math.min(food.stock, quantity) });
+            if (!cart) {
+                const [newCart] = await Cart.create([{ user: userId, items: [] }], { session });
+                cart = newCart;
             }
-        }
 
-        await cart.save();
-        return this.getCart(userId);
+            for (const item of items) {
+                const { foodId, quantity } = item;
+                if (!foodId || quantity < 1) continue;
+
+                const food = await Food.findById(foodId).session(session);
+                if (!food || !food.isAvailable) continue;
+
+                const existingItem = cart.items.find(
+                    (ci) => ci.food.toString() === foodId
+                );
+
+                if (existingItem) {
+                    existingItem.quantity = Math.min(food.stock, existingItem.quantity + quantity);
+                } else {
+                    cart.items.push({ food: foodId, quantity: Math.min(food.stock, quantity) });
+                }
+            }
+
+            await cart.save({ session });
+            return cart;
+        }).then(() => this.getCart(userId));
     }
 }
 

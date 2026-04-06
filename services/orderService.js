@@ -7,6 +7,7 @@ const SettingLocation = require("../models/settinglocation");
 const { calculateDistance } = require("../utils/distance");
 const couponService = require("../services/couponService");
 const { getIO } = require("../config/socket");
+const vnpayHelper = require("../utils/vnpayHelper");
 const { runInTransaction } = require("../utils/transactionHelper");
 
 /**
@@ -16,25 +17,21 @@ const { runInTransaction } = require("../utils/transactionHelper");
 class OrderService {
     /**
      * Create a new order from user's cart
-     * @param {String} userId - User ID
-     * @param {Object} orderData - Order details (address, phone, paymentMethod)
-     * @param {String} idempotencyKey - Unique key to prevent duplicates
-     * @returns {Object} - Created order or cached response
      */
-    async createOrder(userId, orderData, idempotencyKey = null) {
+    async createOrder(userId, orderData, idempotencyKey = null, clientIp = '127.0.0.1') {
         const { address, phone, paymentMethod, items: bodyItems, couponCode } = orderData;
-
+        
         // --- 1. IDEMPOTENCY CHECK ---
         if (idempotencyKey) {
             const existing = await IdempotencyKey.findOne({ key: idempotencyKey, userId });
-            
+
             if (existing) {
                 if (existing.status === 'processing') {
                     const error = new Error("Your order is being processed. Please do not submit again.");
                     error.statusCode = 409;
                     throw error;
                 }
-                
+
                 if (existing.status === 'completed') {
                     return {
                         source: 'idempotency_cache',
@@ -56,6 +53,11 @@ class OrderService {
         try {
             // --- 2. EXECUTION WITHIN TRANSACTION ---
             const result = await runInTransaction(async (session) => {
+                // ... (Existing logic for cart fetching, pricing, shipping, items)
+                // (Assuming lines 59-138 are kept exactly as they were in previous version)
+                // Using placeholders here for clarity of the edit
+                
+                // --- (INSERTING START OF ORIGINAL LOGIC EXTRACT) ---
                 let cartItems = [];
                 let isCartFromDb = false;
 
@@ -135,7 +137,9 @@ class OrderService {
                 }
 
                 const finalTotalPrice = parseFloat((totalPrice + shippingFee - discountAmount).toFixed(2));
+                // --- (END OF ORIGINAL LOGIC EXTRACT) ---
 
+                // Create Order
                 const [order] = await Order.create([{
                     user: userId,
                     items: orderItems,
@@ -150,17 +154,20 @@ class OrderService {
                     isPaid: false,
                 }], { session });
 
+                // Decrease stock
                 for (const item of orderItems) {
-                    await Food.findByIdAndUpdate(item.food, 
+                    await Food.findByIdAndUpdate(item.food,
                         { $inc: { stock: -item.quantity } },
                         { session, runValidators: true }
                     );
                 }
 
+                // Clear cart if from DB
                 if (isCartFromDb) {
                     await Cart.findOneAndUpdate({ user: userId }, { items: [] }, { session });
                 }
 
+                // Create Payment
                 await Payment.create([{
                     order: order._id,
                     user: userId,
@@ -169,10 +176,16 @@ class OrderService {
                     paymentStatus: "pending",
                 }], { session });
 
+                // VNPAY LOGIC: Generate Payment URL if chosen
+                let paymentUrl = null;
+                if (paymentMethod === 'vnpay') {
+                    paymentUrl = vnpayHelper.generatePaymentUrl(order, clientIp);
+                }
+
                 return {
                     success: true,
                     message: "Order placed successfully",
-                    data: { order },
+                    data: { order, paymentUrl },
                 };
             });
 
@@ -180,10 +193,10 @@ class OrderService {
             if (idempotencyKey) {
                 await IdempotencyKey.findOneAndUpdate(
                     { key: idempotencyKey, userId },
-                    { 
-                        status: 'completed', 
-                        responseStatus: 201, 
-                        responseBody: result 
+                    {
+                        status: 'completed',
+                        responseStatus: 201,
+                        responseBody: result
                     }
                 );
             }
@@ -220,6 +233,24 @@ class OrderService {
         return { success: true, data: { order } };
     }
 
+    /**
+     * Rollback stock for an order (e.g. if payment fails or order is cancelled)
+     * @param {String} orderId - Order ID
+     * @param {Object} session - Mongoose session for transaction
+     */
+    async rollbackOrderStock(orderId, session) {
+        const order = await Order.findById(orderId).session(session);
+        if (!order) return;
+
+        console.log(`🔄 Rolling back stock for order ${orderId}`);
+        for (const item of order.items) {
+            await Food.findByIdAndUpdate(item.food,
+                { $inc: { stock: item.quantity } },
+                { session, runValidators: true }
+            );
+        }
+    }
+
     async updateOrderStatus(orderId, status) {
         const validStatuses = ["pending", "confirmed", "preparing", "delivering", "delivered", "completed", "cancelled"];
         if (!validStatuses.includes(status)) throw new Error("Invalid status");
@@ -227,14 +258,15 @@ class OrderService {
         return await runInTransaction(async (session) => {
             const order = await Order.findById(orderId).session(session);
             if (!order) throw new Error("Order not found");
+            
             order.status = status;
             if (status === "completed" && order.paymentMethod === "cash") order.isPaid = true;
 
+            // Rollback stock if status changed to cancelled
             if (status === "cancelled") {
-                for (const item of order.items) {
-                    await Food.findByIdAndUpdate(item.food, { $inc: { stock: item.quantity } }, { session });
-                }
+                await this.rollbackOrderStock(orderId, session);
             }
+            
             await order.save({ session });
 
             try {
@@ -243,7 +275,7 @@ class OrderService {
                     status: status,
                     message: `Status updated to: ${status}`
                 });
-            } catch (err) {}
+            } catch (err) { }
             return { success: true, data: { order } };
         });
     }
@@ -251,22 +283,30 @@ class OrderService {
     async cancelOrder(orderId, userId) {
         return await runInTransaction(async (session) => {
             const order = await Order.findById(orderId).session(session);
-            if (!order || order.user.toString() !== userId) throw new Error("Order not found/Unauthorized");
-            if (order.status !== "pending") throw new Error(`Cannot cancel in ${order.status}`);
-            order.status = "cancelled";
-
-            for (const item of order.items) {
-                await Food.findByIdAndUpdate(item.food, { $inc: { stock: item.quantity } }, { session });
+            
+            if (!order || order.user.toString() !== userId) {
+                throw new Error("Order not found or unauthorized");
             }
+
+            if (order.status !== "pending") {
+                throw new Error(`Cannot cancel order in ${order.status} status`);
+            }
+
+            order.status = "cancelled";
+            
+            // ROLLBACK STOCK ON CANCEL
+            await this.rollbackOrderStock(orderId, session);
+            
             await order.save({ session });
 
             try {
                 getIO().to(`user_${order.user}`).emit("statusUpdate", {
                     orderId: order._id,
                     status: "cancelled",
-                    message: "Cancelled successfully"
+                    message: "Order has been cancelled and stock restored"
                 });
-            } catch (err) {}
+            } catch (err) { }
+            
             return { success: true, message: "Cancelled successfully", data: { order } };
         });
     }

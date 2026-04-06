@@ -47,6 +47,8 @@ app.use('/api/coupons', require('./routes/couponRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/settings', require('./routes/settingRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/payment', require('./routes/paymentRoutes'));
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
