@@ -64,7 +64,6 @@ const couponSchema = new mongoose.Schema(
     }
 );
 
-// Index for fast lookup by code
-couponSchema.index({ code: 1 });
+// Index is automatically handled by the 'unique: true' property in the field definition
 
 module.exports = mongoose.model("Coupon", couponSchema);

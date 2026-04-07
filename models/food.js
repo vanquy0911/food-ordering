@@ -40,8 +40,8 @@ const foodSchema = new mongoose.Schema(
     }
 );
 
-// Create text index on name for search functionality
-foodSchema.index({ name: "text" });
+// Create text index on name and description for search functionality
+foodSchema.index({ name: "text", description: "text" });
 
 // Create index on category for faster filtering
 foodSchema.index({ category: 1 });

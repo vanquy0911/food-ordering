@@ -41,7 +41,6 @@ const idempotencySchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// Ensure searching by key is efficient
-idempotencySchema.index({ key: 1 });
+// Key uniqueness is handled by the 'unique: true' property in the field definition
 
 module.exports = mongoose.model('IdempotencyKey', idempotencySchema);

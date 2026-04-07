@@ -38,6 +38,7 @@ app.get('/api/health', (req, res) => {
 
 // Import routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/address', require('./routes/addressRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/foods', require('./routes/foodRoutes'));

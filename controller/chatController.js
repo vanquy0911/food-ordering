@@ -50,6 +50,30 @@ const chatController = {
             });
         }
     },
+
+    /**
+     * Mark messages as read
+     * PUT /api/chat/:userId/read
+     */
+    markAsRead: async (req, res) => {
+        try {
+            const { userId } = req.params;
+            const { isAdmin } = req.body;
+
+            await chatService.markAsRead(userId, isAdmin);
+
+            res.status(200).json({
+                success: true,
+                message: "Đã đánh dấu đã xem",
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: "Lỗi khi cập nhật trạng thái đã xem",
+                error: error.message,
+            });
+        }
+    },
 };
 
 module.exports = chatController;

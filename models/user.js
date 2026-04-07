@@ -14,7 +14,6 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, "Please provide your email"],
             unique: true,
-            index: true,
             lowercase: true,
             trim: true,
             match: [
@@ -53,7 +52,6 @@ const userSchema = new mongoose.Schema(
 );
 
 // 📌 Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 
 // 🔐 Hash password

@@ -18,9 +18,9 @@ class OrderService {
     /**
      * Create a new order from user's cart
      */
-    async createOrder(userId, orderData, idempotencyKey = null, clientIp = '127.0.0.1') {
+    async createOrder(userId, orderData, idempotencyKey = null, clientIp = '127.0.0.1', userName = null) {
         const { address, phone, paymentMethod, items: bodyItems, couponCode } = orderData;
-        
+
         // --- 1. IDEMPOTENCY CHECK ---
         if (idempotencyKey) {
             const existing = await IdempotencyKey.findOne({ key: idempotencyKey, userId });
@@ -56,7 +56,7 @@ class OrderService {
                 // ... (Existing logic for cart fetching, pricing, shipping, items)
                 // (Assuming lines 59-138 are kept exactly as they were in previous version)
                 // Using placeholders here for clarity of the edit
-                
+
                 // --- (INSERTING START OF ORIGINAL LOGIC EXTRACT) ---
                 let cartItems = [];
                 let isCartFromDb = false;
@@ -153,6 +153,33 @@ class OrderService {
                     status: "pending",
                     isPaid: false,
                 }], { session });
+
+                // --- NEW: Auto-save address to user's address collection if it's new ---
+                try {
+                    const Address = require("../models/address");
+                    const addressService = require("./addressService");
+                    
+                    const existingAddress = await Address.findOne({
+                        user: userId,
+                        street: address.street,
+                        city: address.city,
+                        district: address.district
+                    }).session(session);
+
+                    if (!existingAddress) {
+                        await addressService.createAddress(userId, {
+                            fullName: userName || "Order Address", 
+                            phone: phone,
+                            street: address.street,
+                            district: address.district,
+                            city: address.city,
+                            latitude: address.latitude,
+                            longitude: address.longitude
+                        }, session);
+                    }
+                } catch (err) {
+                    console.error("Auto-save address failed:", err.message);
+                }
 
                 // Decrease stock
                 for (const item of orderItems) {
@@ -258,7 +285,7 @@ class OrderService {
         return await runInTransaction(async (session) => {
             const order = await Order.findById(orderId).session(session);
             if (!order) throw new Error("Order not found");
-            
+
             order.status = status;
             if (status === "completed" && order.paymentMethod === "cash") order.isPaid = true;
 
@@ -266,7 +293,7 @@ class OrderService {
             if (status === "cancelled") {
                 await this.rollbackOrderStock(orderId, session);
             }
-            
+
             await order.save({ session });
 
             try {
@@ -283,7 +310,7 @@ class OrderService {
     async cancelOrder(orderId, userId) {
         return await runInTransaction(async (session) => {
             const order = await Order.findById(orderId).session(session);
-            
+
             if (!order || order.user.toString() !== userId) {
                 throw new Error("Order not found or unauthorized");
             }
@@ -293,10 +320,10 @@ class OrderService {
             }
 
             order.status = "cancelled";
-            
+
             // ROLLBACK STOCK ON CANCEL
             await this.rollbackOrderStock(orderId, session);
-            
+
             await order.save({ session });
 
             try {
@@ -306,7 +333,7 @@ class OrderService {
                     message: "Order has been cancelled and stock restored"
                 });
             } catch (err) { }
-            
+
             return { success: true, message: "Cancelled successfully", data: { order } };
         });
     }
