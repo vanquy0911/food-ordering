@@ -15,11 +15,11 @@ class PaymentController {
         try {
             const result = await paymentService.processVnpayPayment(req.query, 'return');
 
-            const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+            const frontendUrl = (process.env.CLIENT_URL || 'http://localhost:8080').trim();
             return res.redirect(`${frontendUrl}/payment-status?status=${result.status}&orderId=${result.orderId}`);
         } catch (error) {
             console.error("❌ VNPay Return Error:", error);
-            const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+            const frontendUrl = (process.env.CLIENT_URL || 'http://localhost:8080').trim();
             res.redirect(`${frontendUrl}/payment-status?status=error`);
         }
     }
@@ -31,7 +31,7 @@ class PaymentController {
     async vnpayIpn(req, res) {
         try {
             const result = await paymentService.processVnpayPayment(req.query, 'ipn');
-            
+
             if (!result.isVerified) {
                 return res.status(200).json({ RspCode: '97', Message: 'Invalid signature' });
             }

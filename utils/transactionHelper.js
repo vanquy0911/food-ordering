@@ -11,7 +11,7 @@ const mongoose = require('mongoose');
  */
 const runInTransaction = async (work) => {
     const session = await mongoose.startSession();
-    
+
     try {
         session.startTransaction();
 

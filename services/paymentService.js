@@ -16,7 +16,7 @@ class PaymentService {
      * @returns {Object} - Result with status and orderId
      */
     async processVnpayPayment(queryData, type = 'return') {
-        const result = type === 'ipn' 
+        const result = type === 'ipn'
             ? vnpayHelper.verifyIpnCall(queryData)
             : vnpayHelper.verifyReturnUrl(queryData);
 
@@ -54,7 +54,7 @@ class PaymentService {
                 // Success logic
                 updatedOrder.isPaid = true;
                 updatedOrder.status = 'confirmed';
-                
+
                 if (updatedPayment) {
                     updatedPayment.paymentStatus = 'completed';
                     updatedPayment.transactionId = transactionNo;
@@ -65,7 +65,7 @@ class PaymentService {
             } else {
                 // Failure or Cancel logic
                 updatedOrder.status = 'cancelled';
-                
+
                 // ROLLBACK STOCK ON PAYMENT FAILURE
                 await orderService.rollbackOrderStock(orderId, session);
 
@@ -80,11 +80,11 @@ class PaymentService {
         });
 
         const success = responseCode === '00';
-        return { 
-            isValid: true, 
-            success, 
-            rspCode: '00', 
-            message: 'Success', 
+        return {
+            isValid: true,
+            success,
+            rspCode: '00',
+            message: 'Success',
             orderId,
             status: success ? 'success' : 'failed'
         };

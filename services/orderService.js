@@ -158,7 +158,7 @@ class OrderService {
                 try {
                     const Address = require("../models/address");
                     const addressService = require("./addressService");
-                    
+
                     const existingAddress = await Address.findOne({
                         user: userId,
                         street: address.street,
@@ -168,7 +168,7 @@ class OrderService {
 
                     if (!existingAddress) {
                         await addressService.createAddress(userId, {
-                            fullName: userName || "Order Address", 
+                            fullName: userName || "Order Address",
                             phone: phone,
                             street: address.street,
                             district: address.district,
